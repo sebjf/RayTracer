@@ -45,6 +45,19 @@ public class RayTracerManager extends CustomManager {
 		return engine_interface;
 	}
 
+	private static EngineInterface rayTracerInterface()
+	{
+		EngineInterface engine_interface = new EngineInterface("rayTracer");
+
+		InterfaceParam total_rays = engine_interface.addParam("total_rays", CPUTypes.INT32);
+		InterfaceParam triangles_address = engine_interface.addParam("triangles_address", CPUTypes.INT32);
+		InterfaceParam total_triangles = engine_interface.addParam("total_triangles", CPUTypes.INT32);
+
+		/* Calculate how many ticks are required in the main kernel to process all the triangles and rays */
+		engine_interface.ignoreAll(Direction.IN_OUT);
+		return engine_interface;
+	}
+
 	private static EngineInterface memoryInitialisationInterface()
 	{
 		EngineInterface engine_interface = new EngineInterface("memoryInitialisation");

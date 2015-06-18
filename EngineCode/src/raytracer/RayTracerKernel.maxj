@@ -9,6 +9,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 
 class RayTracerKernel extends Kernel {
 
@@ -37,15 +38,22 @@ class RayTracerKernel extends Kernel {
 		new DFEStructType(
 				DFEStructType.sft("triangle", dfeuint));
 
+	public static int Triangles_In_Width_in_Bits = 384;
+	public static int Triangles_Per_Tick = 1;
+
+	public void AddConstantsToMaxFile(CustomManager manager)
+	{
+		manager.addMaxFileConstant("TriangleInWidthInBits", Triangles_In_Width_in_Bits);
+	}
+
 	protected RayTracerKernel(KernelParameters parameters) throws Exception {
 		super(parameters);
 
 
-		int triangles_per_tick = 1;
 		DFEVar total_triangles = io.scalarInput("total_triangles", dfeUInt(32));
 
 		CounterChain set_counters = control.count.makeCounterChain();
-		DFEVar progress = set_counters.addCounter(total_triangles, triangles_per_tick);
+		DFEVar progress = set_counters.addCounter(total_triangles, Triangles_Per_Tick);
 
 		//Calculate how many ticks (reads from 'triangles_in') will be required to traverse the entire scene
 
@@ -56,6 +64,9 @@ class RayTracerKernel extends Kernel {
 		//do intersection
 		DFEStruct results = result_t.newInstance(this);
 		results["triangle"] = PerformIntersectionTest(rays_in, triangles_in) ? constant.var(1).cast(dfeuint) : constant.var(0).cast(dfeuint);
+
+		// we could either use stream offsets to cull all but the nearest intersected triangle, or we could output every intersected triangle for each ray
+		// the latter would be better for things like alpha blending, but would require more work on the CPU
 
 		io.output("results_out", results, result_t, progress.eq(total_triangles-1));
 	}
