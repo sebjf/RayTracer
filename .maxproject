@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<maxCompilerManager version="2">
+<enginePart internalEngineSubproject="RayTracer_EngineCode" isSrcBin="false" isUseDefaultSelected="false" outputLocation="/RayTracer_EngineCode/bin" projectName="RayTracer"/>
+<cpuPart internalCpuSubproject="RayTracer_CPUCode"/>
+<watchedFiles/>
+</maxCompilerManager>

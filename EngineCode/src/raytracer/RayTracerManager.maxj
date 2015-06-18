@@ -1,0 +1,46 @@
+package raytracer;
+
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+
+public class RayTracerManager extends CustomManager {
+
+	private static final String s_kernelName = "RayTracerKernel";
+
+	public RayTracerManager(RayTracerEngineParameters engineParameters) throws Exception {
+		super(engineParameters);
+
+		config.setAllowNonMultipleTransitions(true);
+
+		KernelBlock block = addKernel(new RayTracerKernel(makeKernelParameters(s_kernelName)));
+
+		for (String inputName: block.getAllInputs())
+			block.getInput(inputName).connect(addStreamFromCPU(inputName));
+		for (String outputName: block.getAllOutputs())
+			addStreamToCPU(outputName).connect(block.getOutput(outputName));
+
+		createSLiCinterface(modeDefault());
+
+		configBuild(engineParameters);
+	}
+
+	private static EngineInterface modeDefault() {
+		EngineInterface engine_interface = new EngineInterface();
+
+		return engine_interface;
+	}
+
+	private void configBuild(RayTracerEngineParameters params) {
+		BuildConfig buildConfig = getBuildConfig();
+		buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
+		buildConfig.setMPPRParallelism(params.getMPPRThreads());
+		buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
+	}
+
+	public static void main(String[] args) throws Exception {
+		RayTracerManager manager = new RayTracerManager(new RayTracerEngineParameters(args));
+		manager.build();
+	}
+}

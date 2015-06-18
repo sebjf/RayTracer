@@ -1,0 +1,204 @@
+package raytracer;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.KernelMath;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+public class KernelVectorMath {
+
+	private static void checkVectors(DFEVector<DFEVar> a, DFEVector<DFEVar> b) throws Exception
+	{
+		/* Sanity check the vectors */
+		if(a.getSize() != b.getSize()){
+			throw new Exception("Trying to multiply vectors with different sizes.");
+		}
+		if(a.getKernel() != b.getKernel()){
+			throw new Exception("Trying to multiply vectors from different kernels.");
+		}
+	}
+
+	private static DFEVector<DFEVar> makeVector(DFEVector<DFEVar> a)
+	{
+		return makeVector(a, a.getSize());
+	}
+
+	@SuppressWarnings("unchecked")
+	private static DFEVector<DFEVar> makeVector(DFEVector<DFEVar> a, int n)
+	{
+		KernelLib k = a.getKernel();
+		return (DFEVector<DFEVar>) (new DFEVectorType(a.getType().getContainedType(), n).newInstance(k));
+	}
+
+
+	private static DFEVar makeConstant(DFEVector<DFEVar> a, double v)
+	{
+		KernelLib k = a.getKernel();
+		return a.getKernel().constant.var((DFEType) a.getType().getContainedType(), v);
+	}
+
+	public static DFEVector<DFEVar> multiply(DFEVector<DFEVar> a, DFEVector<DFEVar> b) throws Exception
+	{
+		checkVectors(a,b);
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, a[i] * b[i]);
+		}
+		return ans;
+	}
+
+	public static DFEVector<DFEVar> multiply(DFEVar b, DFEVector<DFEVar> a){
+		return multiply(a,b);
+	}
+
+	public static DFEVector<DFEVar> multiply(DFEVector<DFEVar> a, DFEVar b)
+	{
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, a[i] * b);
+		}
+		return ans;
+	}
+
+
+	public static DFEVector<DFEVar> add(DFEVector<DFEVar> a, DFEVector<DFEVar> b) throws Exception
+	{
+		checkVectors(a,b);
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, a[i] + b[i]);
+		}
+		return ans;
+	}
+
+	public static DFEVector<DFEVar> subtract(DFEVector<DFEVar> a, DFEVector<DFEVar> b) throws Exception
+	{
+		checkVectors(a,b);
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, a[i] - b[i]);
+		}
+		return ans;
+	}
+
+	public static DFEVector<DFEVar> divide(DFEVector<DFEVar> a, DFEVar b) throws Exception
+	{
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, a[i] / b);
+		}
+		return ans;
+	}
+
+	public static DFEVar norm(DFEVector<DFEVar> a)
+	{
+		DFEVar sum = a[0] * a[0];
+		for(int i = 1; i < a.getSize(); i++)
+		{
+			sum = sum + (a[i] * a[i]);
+		}
+		return KernelMath.sqrt(sum);
+	}
+
+	public static DFEVar dot(DFEVector<DFEVar> a, DFEVector<DFEVar> b) throws Exception
+	{
+		if(a.getSize() != 3){
+			throw new Exception("Dot Product is only valid for 3 element vectors.");
+		}
+
+		DFEVector<DFEVar> products = multiply(a,b);
+		DFEVar ans = products[0] + products[1] + products[2];
+
+		return ans;
+	}
+
+
+	public static DFEVector<DFEVar> cross(DFEVector<DFEVar> a, DFEVector<DFEVar> b) throws Exception
+	{
+		checkVectors(a,b);
+		DFEVector<DFEVar> ans = makeVector(a);
+
+		if(a.getSize() != 3){
+			throw new Exception("Cross Product is only valid for 3 element vectors.");
+		}
+
+		//http://www.mathsisfun.com/algebra/vectors-cross-product.html
+
+		int x = 0;
+		int y = 1;
+		int z = 2;
+
+		ans.connect(x, (a[y]*b[z]) - (a[z]*b[y]));
+		ans.connect(y, (a[z]*b[x]) - (a[x]*b[z]));
+		ans.connect(z, (a[x]*b[y]) - (a[y]*b[x]));
+
+		return ans;
+	}
+
+	public static DFEVector<DFEVar> abs(DFEVector<DFEVar> a) throws Exception
+	{
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, KernelMath.abs(a[i]));
+		}
+		return ans;
+	}
+
+	public static DFEVector<DFEVar> invertedHalfSignum(DFEVector<DFEVar> a) throws Exception
+	{
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, (a[i] < 0) ? makeConstant(a,1) : makeConstant(a, 0));
+		}
+		return ans;
+	}
+
+	/* This version of max identifies the largest element of a, and returns the corresponding element of b and the index of the element */
+	public static DFEVar max(DFEVector<DFEVar> a, DFEVector<DFEVar> b) throws Exception
+	{
+		if(a.getSize() != 3){
+			throw new Exception("Max is only valid for 3 element vectors.");
+		}
+		return (a[0] > a[1] ? ((a[0] > a[2]) ? b[0] : b[2]) : ((a[1] > a[2]) ? b[1] : b[2]));
+	}
+
+	public static DFEVector<DFEVar> indicesVector(DFEVector<DFEVar> a) throws Exception
+	{
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, makeConstant(a, i));
+		}
+		return ans;
+	}
+
+	public static DFEVector<DFEVar> negate(DFEVector<DFEVar> a) throws Exception
+	{
+		DFEVector<DFEVar> ans = makeVector(a);
+		for(int i = 0; i < a.getSize(); i++)
+		{
+			ans.connect(i, -a[i]);
+		}
+		return ans;
+	}
+
+	public static DFEVector<DFEVar> select(DFEVector<DFEVar> a, int base, int elements) throws Exception
+	{
+		DFEVector<DFEVar> ans = makeVector(a,elements);
+		for(int i = 0; i < elements; i++)
+		{
+			ans.connect(i, a[base+i]);
+		}
+		return ans;
+	}
+
+}

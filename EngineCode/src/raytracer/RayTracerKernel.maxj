@@ -1,0 +1,108 @@
+package raytracer;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+class RayTracerKernel extends Kernel {
+
+	private static final DFEType dfechar = dfeUInt(8);
+	private static final DFEType dfeuint = dfeInt(32);
+	private static final DFEType dfefloat = dfeFloat(8, 24);
+	private static final DFEVectorType<DFEVar> vector3 = new DFEVectorType<DFEVar>(dfeFloat(8,24),3);
+	private static final DFEVectorType<DFEVar> vector4 = new DFEVectorType<DFEVar>(dfeFloat(8,24),4);
+
+	private static final DFEStructType triangle_t =
+		new DFEStructType(
+				DFEStructType.sft("v0", vector3),
+				DFEStructType.sft("v1", vector3),
+				DFEStructType.sft("v2", vector3),
+				DFEStructType.sft("padding", dfeUInt(96)));
+
+	private static final DFEStructType ray_t =
+		new DFEStructType(
+				DFEStructType.sft("origin", vector3),
+				DFEStructType.sft("direction", vector3),
+				DFEStructType.sft("padding", dfeUInt(64)));
+
+	private static final DFEStructType result_t =
+		new DFEStructType(
+				DFEStructType.sft("triangle", dfeuint));
+
+	protected RayTracerKernel(KernelParameters parameters) throws Exception {
+		super(parameters);
+
+		DFEStruct rays_in = io.input("rays_in", ray_t);
+		DFEStruct triangles_in = io.input("triangles_in", triangle_t);
+
+		//do intersection
+		DFEStruct results = result_t.newInstance(this);
+		results["triangle"] = PerformIntersectionTest(rays_in, triangles_in) ? constant.var(1).cast(dfeuint) : constant.var(0).cast(dfeuint);
+
+		io.output("results_out", results, result_t);
+	}
+
+	//https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm
+
+	DFEVar PerformIntersectionTest(DFEStruct ray, DFEStruct triangle) throws Exception
+	{
+		DFEVector<DFEVar> V1 = triangle["v0"];
+		DFEVector<DFEVar> V2 = triangle["v1"];
+		DFEVector<DFEVar> V3 = triangle["v2"];
+
+		DFEVector<DFEVar> D = ray["direction"];
+		DFEVector<DFEVar> O = ray["origin"];
+
+		DFEVector<DFEVar> e1, e2;  //Edge1, Edge2
+		DFEVector<DFEVar> P, Q, T;
+		DFEVar det, inv_det, u, v;
+		DFEVar t;
+
+		DFEVar valid = constant.var(true);
+
+		//Find vectors for two edges sharing V1
+		e1 = KernelVectorMath.subtract(V2, V1);
+		e2 = KernelVectorMath.subtract(V3, V1);
+
+		//Begin calculating determinant - also used to calculate u parameter
+		P = KernelVectorMath.cross(D, e2);
+
+		//if determinant is near zero, ray lies in plane of triangle
+		det = KernelVectorMath.dot(e1, P);
+
+		//NOT CULLING
+
+		//dot product is 0 meaning ray is parallel with plane of triangle so invalidate result
+		valid = valid & (det.neq(0));
+
+		inv_det = 1.f / det;
+
+		//calculate distance from V1 to ray origin
+		T = KernelVectorMath.subtract(O, V1);
+
+		//Calculate u parameter and test bound
+		u = KernelVectorMath.dot(T, P) * inv_det;
+		//The intersection lies outside of the triangle
+		valid = valid & (u > 0.f) & (u <= 1.f);
+
+		//Prepare to test v parameter
+		Q = KernelVectorMath.cross(T, e1);
+
+		//Calculate V parameter and test bound
+		v = KernelVectorMath.dot(D, Q) * inv_det;
+		//The intersection lies outside of the triangle
+		valid = valid & (v > 0.f) & (u + v <= 1.f);
+
+		t = KernelVectorMath.dot(e2, Q) * inv_det;
+
+		valid = valid & (t > 0);
+
+		return valid;
+	}
+
+}
