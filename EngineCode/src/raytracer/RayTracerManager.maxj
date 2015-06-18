@@ -3,7 +3,12 @@ package raytracer;
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup.MemoryAccessPattern;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 public class RayTracerManager extends CustomManager {
 
@@ -12,22 +17,44 @@ public class RayTracerManager extends CustomManager {
 	public RayTracerManager(RayTracerEngineParameters engineParameters) throws Exception {
 		super(engineParameters);
 
-		config.setAllowNonMultipleTransitions(true);
+		DebugLevel myDebugLevel = new DebugLevel();
+		myDebugLevel.setHasStreamStatus(true);
+		debug.setDebugLevel(myDebugLevel);
 
-		KernelBlock block = addKernel(new RayTracerKernel(makeKernelParameters(s_kernelName)));
+		KernelBlock rayTracer = addKernel(new RayTracerKernel(makeKernelParameters(s_kernelName)));
 
-		for (String inputName: block.getAllInputs())
-			block.getInput(inputName).connect(addStreamFromCPU(inputName));
-		for (String outputName: block.getAllOutputs())
-			addStreamToCPU(outputName).connect(block.getOutput(outputName));
+		/* Memory initialisation for triangles */
+
+		KernelBlock memoryCommandGenerator = addKernel(new TriangleReaderCommandGenerator(makeKernelParameters("MemoryCommandGenerator")));
+
+		addStreamToOnCardMemory("triangles_to_mem", MemoryAccessPattern.LINEAR_1D) <== addStreamFromCPU("triangles_in", StreamMode.LOW_LATENCY_ENABLED);
+		rayTracer.getInput("triangles_in").connect(addStreamFromOnCardMemory("triangles_from_mem", memoryCommandGenerator.getOutput("read_commands")));
+
+		rayTracer.getInput("rays_in").connect(addStreamFromCPU("rays_in"));
+		addStreamToCPU("results_out").connect(rayTracer.getOutput("results_out"));
 
 		createSLiCinterface(modeDefault());
+		createSLiCinterface(memoryInitialisationInterface());
 
 		configBuild(engineParameters);
 	}
 
 	private static EngineInterface modeDefault() {
 		EngineInterface engine_interface = new EngineInterface();
+
+		return engine_interface;
+	}
+
+	private static EngineInterface memoryInitialisationInterface()
+	{
+		EngineInterface engine_interface = new EngineInterface("memoryInitialisation");
+
+		InterfaceParam lmem_size = engine_interface.addParam("size", CPUTypes.INT32);
+		InterfaceParam lmem_address = engine_interface.addParam("address", CPUTypes.INT32);
+		engine_interface.setLMemLinear("triangles_to_mem", lmem_address, lmem_size);
+		engine_interface.setStream("triangles_in", CPUTypes.INT32, lmem_size);
+
+		engine_interface.ignoreAll(Direction.IN_OUT);
 
 		return engine_interface;
 	}

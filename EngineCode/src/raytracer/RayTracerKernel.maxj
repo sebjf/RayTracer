@@ -2,6 +2,7 @@ package raytracer;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
@@ -17,34 +18,46 @@ class RayTracerKernel extends Kernel {
 	private static final DFEVectorType<DFEVar> vector3 = new DFEVectorType<DFEVar>(dfeFloat(8,24),3);
 	private static final DFEVectorType<DFEVar> vector4 = new DFEVectorType<DFEVar>(dfeFloat(8,24),4);
 
-	private static final DFEStructType triangle_t =
+	//ensure that triangles sizes are always a multiple of the memory burst width
+
+	public static final DFEStructType triangle_t =
 		new DFEStructType(
 				DFEStructType.sft("v0", vector3),
 				DFEStructType.sft("v1", vector3),
 				DFEStructType.sft("v2", vector3),
 				DFEStructType.sft("padding", dfeUInt(96)));
 
-	private static final DFEStructType ray_t =
+	public static final DFEStructType ray_t =
 		new DFEStructType(
 				DFEStructType.sft("origin", vector3),
 				DFEStructType.sft("direction", vector3),
 				DFEStructType.sft("padding", dfeUInt(64)));
 
-	private static final DFEStructType result_t =
+	public static final DFEStructType result_t =
 		new DFEStructType(
 				DFEStructType.sft("triangle", dfeuint));
 
 	protected RayTracerKernel(KernelParameters parameters) throws Exception {
 		super(parameters);
 
-		DFEStruct rays_in = io.input("rays_in", ray_t);
+
+		int triangles_per_tick = 1;
+		DFEVar total_triangles = io.scalarInput("total_triangles", dfeUInt(32));
+
+		CounterChain set_counters = control.count.makeCounterChain();
+		DFEVar progress = set_counters.addCounter(total_triangles, triangles_per_tick);
+
+		//Calculate how many ticks (reads from 'triangles_in') will be required to traverse the entire scene
+
+
+		DFEStruct rays_in = io.input("rays_in", ray_t, progress.eq(0)); //only read a set of rays when the entire scene has been traversed
 		DFEStruct triangles_in = io.input("triangles_in", triangle_t);
 
 		//do intersection
 		DFEStruct results = result_t.newInstance(this);
 		results["triangle"] = PerformIntersectionTest(rays_in, triangles_in) ? constant.var(1).cast(dfeuint) : constant.var(0).cast(dfeuint);
 
-		io.output("results_out", results, result_t);
+		io.output("results_out", results, result_t, progress.eq(total_triangles-1));
 	}
 
 	//https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm

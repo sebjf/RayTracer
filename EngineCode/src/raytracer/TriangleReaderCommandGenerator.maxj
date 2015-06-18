@@ -1,0 +1,40 @@
+package raytracer;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.LMemCommandStream;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+/* Generates the commands to feed a stream of triangles continousouly through the ray tracing kernel */
+
+public class TriangleReaderCommandGenerator extends Kernel {
+
+	public static final int burstSizeInBytes = 384;
+	public static final int burstCount = 1;
+
+	protected TriangleReaderCommandGenerator(KernelParameters parameters) throws Exception {
+		super(parameters);
+
+		DFEVar triangles_to_read = io.scalarInput("triangles_to_read_in_bursts", dfeUInt(32));
+		DFEVar offset_in_bursts = constant.var(0);
+
+	/*
+		float word_size_in_bytes = burstSizeInBytes * burstCount;
+		int bits_per_sample = RayTracerKernel.triangle_t.getTotalBits();
+		float bytes_per_sample = bits_per_sample / 8;
+		int samples_per_word = (int) Math.floor(word_size_in_bytes / bytes_per_sample);
+	 */
+
+		LMemCommandStream.makeKernelOutput(
+				"read_commands",
+				constant.var(true),
+				offset_in_bursts.cast(dfeUInt(28)),
+				triangles_to_read.cast(dfeUInt(8)), //for now we wont read more than 128 bursts worth of triangles
+				//constant.var(dfeUInt(8),triangles_to_read),
+				constant.var(dfeUInt(7),1),
+				constant.var(dfeUInt(4),0),
+				constant.var(false));
+
+	}
+
+}
