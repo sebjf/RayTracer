@@ -48,6 +48,7 @@ public:
 
 	int m_triangles_per_word;
 	int m_word_width_in_bytes;
+	int m_burst_size_in_bytes;
 
 	Triangles(max_file_t* maxfile, int triangle_count)
 	{
@@ -55,8 +56,8 @@ public:
 
 		/* first compute the number of triangles in this set - this may be larger than triangle_count because triangle arrays must be aligned on bursts */
 
-		int burst_size_in_bytes = max_get_burst_size(maxfile, NULL);
-		int triangles_per_burst = floor((float)burst_size_in_bytes/(float)sizeof(triangle_t));
+		m_burst_size_in_bytes = max_get_burst_size(maxfile, NULL);
+		int triangles_per_burst = floor((float)m_burst_size_in_bytes/(float)sizeof(triangle_t));
 
 		m_total_bursts = ceil((float)triangle_count / (float)triangles_per_burst);
 		m_total_triangles = m_total_bursts * triangles_per_burst;
@@ -96,6 +97,18 @@ public:
 		return triangles_data;
 	}
 
+	void IntialiseTriangles(max_engine_t* engine, int offset_in_bursts)
+	{
+		triangle_t* trianglesdata = Prepare();
+
+		max_actions_t* init_act = max_actions_init(m_maxfile, "memoryInitialisation");
+		max_set_param_uint64t(init_act, "address", offset_in_bursts * m_burst_size_in_bytes);
+		max_set_param_uint64t(init_act, "size", m_triangles_size_in_bytes);
+		max_queue_input(init_act,"triangles_in",trianglesdata,m_triangles_size_in_bytes);
+
+		max_run(engine, init_act);
+	}
+
 private:
 	triangle_t* triangles_data;
 
@@ -114,13 +127,8 @@ int main(void)
 
 	int total_triangles = 16;
 
-	int burst_size_in_bytes = max_get_burst_size(maxfile, NULL);
-	int triangles_per_burst = floor((float)burst_size_in_bytes)/(float)sizeof(struct triangle_t);
-	int total_bursts = ceil((float)total_triangles / (float)triangles_per_burst);
-	int triangle_size_in_bytes = total_bursts * burst_size_in_bytes;
-
-	triangle_t* triangles = (triangle_t*)malloc(triangle_size_in_bytes);
-	memset(triangles,0,triangle_size_in_bytes);
+	triangle_t* triangles = (triangle_t*)malloc(sizeof(triangle_t) * total_triangles);
+	memset(triangles,0,sizeof(triangle_t) * total_triangles);
 
 	for(int i = 0; i < total_triangles; i++)
 	{
@@ -136,6 +144,9 @@ int main(void)
 		triangles[i].v2.y = -1;
 
 	}
+
+	Triangles* tris = new Triangles(maxfile, total_triangles);
+	tris->m_triangles = triangles;
 
 	/* prepare some rays */
 
@@ -157,22 +168,14 @@ int main(void)
 
 
 	/* initialise triangles */
-
-	max_actions_t* init_act = max_actions_init(maxfile, "memoryInitialisation");
-	max_set_param_uint64t(init_act, "address", 0);
-	max_set_param_uint64t(init_act, "size", triangle_size_in_bytes);
-	max_queue_input(init_act,"triangles_in",triangles,triangle_size_in_bytes);
-
-	max_run(engine, init_act);
+	tris->IntialiseTriangles(engine,0);
 
 	max_actions_t* act = max_actions_init(maxfile, NULL);
 	
-
-
 	int triangles_per_tick = 1;
 	int rays_per_tick = 1;
 	int rays_in_set = N;
-	int triangles_in_set = total_bursts * triangles_per_burst;
+	int triangles_in_set = tris->m_total_triangles;
 
 	int intersection_ticks = (triangles_in_set / triangles_per_tick) * (rays_in_set / rays_per_tick);
 	int memory_command_ticks = (rays_in_set / rays_per_tick);
