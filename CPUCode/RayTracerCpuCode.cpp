@@ -30,87 +30,95 @@ struct ray_t
 
 struct result_t
 {
-	u_int32_t triangle;
+	u_int64_t result;
+	u_int64_t padding;
 };
 
 class Triangles
 {
-public:
+private:
 	triangle_t* m_triangles;
 
 	max_file_t* m_maxfile;
 
 	int m_triangles_size_in_bytes;
 
+public:
 	int m_total_triangles;
 	int m_total_bursts;
 	int m_total_words;
 
-	int m_triangles_per_word;
-	int m_word_width_in_bytes;
-	int m_burst_size_in_bytes;
+	float m_triangles_per_word;
+	float m_word_width_in_bytes;
+	float m_burst_size_in_bytes;
 
 	Triangles(max_file_t* maxfile, int triangle_count)
 	{
 		m_maxfile = maxfile;
 
-		/* first compute the number of triangles in this set - this may be larger than triangle_count because triangle arrays must be aligned on bursts */
-
-		m_burst_size_in_bytes = max_get_burst_size(maxfile, NULL);
-		int triangles_per_burst = floor((float)m_burst_size_in_bytes/(float)sizeof(triangle_t));
-
-		m_total_bursts = ceil((float)triangle_count / (float)triangles_per_burst);
-		m_total_triangles = m_total_bursts * triangles_per_burst;
-
-		m_triangles_size_in_bytes = m_total_triangles * sizeof(triangle_t);
-
-		/* next compute the boundaries in memory for subsets of triangles - triangles are read into the kernel N triangles at a time, and there may be padding
-		 * depending on the triangle width
-		 * triangles may cross burst boundaries (though not at the beginning or end) but they will not cross word boundaries */
+		/* compute how many triangles will fit in one word. words may not be a multiple of the triangle width so will include padding at the msb */
 
 		int word_width_in_bits = max_get_constant_uint64t(maxfile, "TrianglesInWidthInBits");
 		m_word_width_in_bytes = word_width_in_bits / 8;
+		float triangle_size_in_bytes = sizeof(triangle_t);
 
-		int triangle_size_in_bytes = sizeof(triangle_t);
-		int triangle_size_in_bits = triangle_size_in_bytes/8;
+		m_triangles_per_word = floor(m_word_width_in_bytes / triangle_size_in_bytes);
 
-		m_triangles_per_word = floor((float)word_width_in_bits / (float)triangle_size_in_bits);
+		/* calculate the minimum number of words required to represent the triangle set size we desire. this may be changed later on to accomodate the number of bursts
+		 * required to read all the triangles */
 
-		m_total_words = m_total_triangles / m_triangles_per_word;
+		m_total_words = ceil((float)triangle_count / m_triangles_per_word);
 
+		/* compute the number of bursts required to read all the words, and round it up. the word width may be a fraction, or multiple, of the burst width. the burst count
+		 * must always be an integer however, so if it is a fraction, more triangles will be read than are required */
+
+		m_burst_size_in_bytes = max_get_burst_size(maxfile, NULL);
+		float words_per_burst = m_burst_size_in_bytes / m_word_width_in_bytes;
+
+		m_total_bursts = (int)ceil((float)m_total_words / words_per_burst);
+
+		/* update the total number of bursts, words and triangles, to match the actual number that will be read by the burst count we have decided on */
+
+		m_total_words = m_total_bursts * words_per_burst;
+		m_total_triangles = m_total_words * m_triangles_per_word;
+
+		m_triangles_size_in_bytes = m_total_bursts * m_burst_size_in_bytes;
+
+		/* and finally allocate space for the actual triangles. triangles will be stored in this array with the same layout as they have on the dfe */
+
+		m_triangles = (triangle_t*)malloc(m_triangles_size_in_bytes);
 	}
 
-	triangle_t* Prepare()
+	/* returns a pointer into the triangles array, at which point m_triangles_per_word triangles should be copied in */
+	triangle_t* GetTrianglesWord(int word)
 	{
-		triangles_data = (triangle_t*)malloc(m_triangles_size_in_bytes);
+		return (triangle_t*)(((char*)m_triangles) + ((int)m_word_width_in_bytes * word));
+	}
 
-		//copy the triangles into the triangles_data array - triangles_data is laid out such that there is padding in the correct place when sets of triangles
-		//are read from lmem into the kernel
+	triangle_t* GetTriangle(int triangle)
+	{
+		int word = floor((float)triangle/(float)m_triangles_per_word);
+		int offset = triangle % (int)m_triangles_per_word;
+		return (GetTrianglesWord(word) + offset);
+	}
 
-		for(int i = 0; i < m_total_words; i++)
+	void SetTriangles(triangle_t* triangles_src, int triangles_src_count)
+	{
+		for(int i = 0; i < triangles_src_count; i++)
 		{
-			memccpy(triangles_data, m_triangles, sizeof(triangle_t), m_triangles_per_word);
-			triangles_data += m_word_width_in_bytes;
-			m_triangles += m_triangles_per_word;
+			*GetTriangle(i) = triangles_src[i];
 		}
-
-		return triangles_data;
 	}
 
 	void IntialiseTriangles(max_engine_t* engine, int offset_in_bursts)
 	{
-		triangle_t* trianglesdata = Prepare();
-
 		max_actions_t* init_act = max_actions_init(m_maxfile, "memoryInitialisation");
 		max_set_param_uint64t(init_act, "address", offset_in_bursts * m_burst_size_in_bytes);
 		max_set_param_uint64t(init_act, "size", m_triangles_size_in_bytes);
-		max_queue_input(init_act,"triangles_in",trianglesdata,m_triangles_size_in_bytes);
+		max_queue_input(init_act,"triangles_in",m_triangles,m_triangles_size_in_bytes);
 
 		max_run(engine, init_act);
 	}
-
-private:
-	triangle_t* triangles_data;
 
 };
 
@@ -119,7 +127,7 @@ int main(void)
 	max_file_t *maxfile = RayTracer_init();
 	max_engine_t *engine = max_load(maxfile, "*");
 
-	int N = 16; //5 intersection tests
+	int num_rays = 16; //5 intersection tests
 
 	/* prepare some triangles */
 
@@ -146,22 +154,27 @@ int main(void)
 	}
 
 	Triangles* tris = new Triangles(maxfile, total_triangles);
-	tris->m_triangles = triangles;
+	tris->SetTriangles(triangles, total_triangles);
 
 	/* prepare some rays */
 
-	int rays_size = (sizeof(struct ray_t) * N);
+	int rays_size = (sizeof(struct ray_t) * num_rays);
 	ray_t* rays = (ray_t*)malloc(rays_size);
 	memset(rays,0,rays_size);
 
-	for(int i = 0; i < N; i++)
+	for(int i = 0; i < num_rays; i++)
 	{
-		rays[i].direction.z = 1;
+		if(i > 10){
+			rays[i].direction.z = 1;
+		}
 	}
 
-	/* prepare the kernel */
+	/* prepare the output */
 
-	int results_size = (sizeof(struct result_t) * N);
+	//for now one pcie word per result...
+
+	int total_intersections = num_rays * total_triangles;
+	int results_size = (sizeof(result_t) * total_intersections);
 	result_t* results = (result_t*)malloc(results_size);
 	memset(results,0,results_size);
 
@@ -174,14 +187,14 @@ int main(void)
 	
 	int triangles_per_tick = 1;
 	int rays_per_tick = 1;
-	int rays_in_set = N;
+	int rays_in_set = num_rays;
 	int triangles_in_set = tris->m_total_triangles;
 
 	int intersection_ticks = (triangles_in_set / triangles_per_tick) * (rays_in_set / rays_per_tick);
 	int memory_command_ticks = (rays_in_set / rays_per_tick);
 
 	max_set_ticks(act, "MemoryCommandGenerator", memory_command_ticks);
-	max_set_uint64t(act,"MemoryCommandGenerator","triangles_to_read_in_bursts",total_bursts);
+	max_set_uint64t(act,"MemoryCommandGenerator","triangles_to_read_in_bursts",tris->m_total_bursts);
 
 	max_ignore_lmem(act,"triangles_to_mem");
 	max_set_ticks(act, "RayTracerKernel", intersection_ticks);
@@ -198,9 +211,9 @@ int main(void)
 	max_unload(engine);
 	
 	// TODO Use result data
-	for(int i = 0; i < N; ++i)
+	for(int i = 0; i < total_intersections; ++i)
 	{
-		printf("%i: %i\n", i, results[i].triangle);
+		printf("%i: %i\n", i, results[i].result > 0 || results[i].padding > 0);
 	}
 
 	printf("Done.\n");

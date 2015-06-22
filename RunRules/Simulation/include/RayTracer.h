@@ -6,6 +6,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
+#define RayTracer_TrianglesInWidthInBits (384)
 #define RayTracer_PCIE_ALIGNMENT (16)
 
 

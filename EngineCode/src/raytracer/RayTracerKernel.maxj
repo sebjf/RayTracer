@@ -40,6 +40,7 @@ class RayTracerKernel extends Kernel {
 
 	public static int Triangles_In_Width_in_Bits = 384;
 	public static int Triangles_Per_Tick = 1;
+	public static int Rays_Per_Tick = 1;
 
 	public void AddConstantsToMaxFile(CustomManager manager)
 	{
@@ -62,13 +63,12 @@ class RayTracerKernel extends Kernel {
 		DFEStruct triangles_in = io.input("triangles_in", triangle_t);
 
 		//do intersection
-		DFEStruct results = result_t.newInstance(this);
-		results["triangle"] = PerformIntersectionTest(rays_in, triangles_in) ? constant.var(1).cast(dfeuint) : constant.var(0).cast(dfeuint);
+		DFEVar results = PerformIntersectionTest(rays_in, triangles_in);
 
-		// we could either use stream offsets to cull all but the nearest intersected triangle, or we could output every intersected triangle for each ray
-		// the latter would be better for things like alpha blending, but would require more work on the CPU
+		// output the results of the intersection tests as boolean values. Each ray has a word, equal to the number of triangles.
+		// make sure that all result words are multiples of the pcie word size.
 
-		io.output("results_out", results, result_t, progress.eq(total_triangles-1));
+		io.output("results_out", constant.var(dfeUInt(127),0).cat(results), dfeRawBits(128));
 	}
 
 	//https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm

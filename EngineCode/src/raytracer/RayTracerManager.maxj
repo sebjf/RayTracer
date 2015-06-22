@@ -23,6 +23,8 @@ public class RayTracerManager extends CustomManager {
 
 		KernelBlock rayTracer = addKernel(new RayTracerKernel(makeKernelParameters(s_kernelName)));
 
+		addMaxFileConstant("TrianglesInWidthInBits", RayTracerKernel.Triangles_In_Width_in_Bits);
+
 		/* Memory initialisation for triangles */
 
 		KernelBlock memoryCommandGenerator = addKernel(new TriangleReaderCommandGenerator(makeKernelParameters("MemoryCommandGenerator")));
