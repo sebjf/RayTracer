@@ -1,5 +1,8 @@
 package raytracer;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
@@ -25,26 +28,45 @@ class RayTracerKernel extends Kernel {
 		new DFEStructType(
 				DFEStructType.sft("v0", vector3),
 				DFEStructType.sft("v1", vector3),
-				DFEStructType.sft("v2", vector3),
-				DFEStructType.sft("padding", dfeUInt(96)));
+				DFEStructType.sft("v2", vector3)
+			);
 
 	public static final DFEStructType ray_t =
 		new DFEStructType(
 				DFEStructType.sft("origin", vector3),
 				DFEStructType.sft("direction", vector3),
-				DFEStructType.sft("padding", dfeUInt(64)));
+				DFEStructType.sft("padding", dfeUInt(64))
+			);
 
 	public static final DFEStructType result_t =
 		new DFEStructType(
-				DFEStructType.sft("triangle", dfeuint));
+				DFEStructType.sft("triangle", dfeuint)
+			);
 
-	public static int Triangles_In_Width_in_Bits = 384;
-	public static int Triangles_Per_Tick = 1;
+	public static int Triangles_In_Width_in_Bits = 384 * 8;
+	public static int Triangles_Per_Tick = 10;
+
 	public static int Rays_Per_Tick = 1;
 
 	public void AddConstantsToMaxFile(CustomManager manager)
 	{
 		manager.addMaxFileConstant("TriangleInWidthInBits", Triangles_In_Width_in_Bits);
+	}
+
+	protected List<DFEStruct> GetTriangles()
+	{
+		List<DFEStruct> triangles = new ArrayList<DFEStruct>();
+
+		Triangles_Per_Tick = (int) Math.floor((float)Triangles_In_Width_in_Bits / (float)triangle_t.getTotalBits());
+
+		DFEVar triangles_in = io.input("triangles_in", dfeRawBits(Triangles_In_Width_in_Bits));
+
+		for(int i = 0; i < Triangles_Per_Tick; i++)
+		{
+			triangles.add(triangle_t.unpack(triangles_in.slice(i * triangle_t.getTotalBits(), triangle_t.getTotalBits())));
+		}
+
+		return triangles;
 	}
 
 	protected RayTracerKernel(KernelParameters parameters) throws Exception {
@@ -56,19 +78,26 @@ class RayTracerKernel extends Kernel {
 		CounterChain set_counters = control.count.makeCounterChain();
 		DFEVar progress = set_counters.addCounter(total_triangles, Triangles_Per_Tick);
 
-		//Calculate how many ticks (reads from 'triangles_in') will be required to traverse the entire scene
-
-
+		//get the ray set
 		DFEStruct rays_in = io.input("rays_in", ray_t, progress.eq(0)); //only read a set of rays when the entire scene has been traversed
-		DFEStruct triangles_in = io.input("triangles_in", triangle_t);
 
-		//do intersection
-		DFEVar results = PerformIntersectionTest(rays_in, triangles_in);
+		//get the triangle set
+		List<DFEStruct> triangles_in = GetTriangles();
+
+		DFEVar results = constant.var(dfeUInt(128 - Triangles_Per_Tick),0);
+
+		//perform the intersection tests
+		for(int i = 0; i < triangles_in.size(); i++)
+		{
+			DFEStruct triangle = triangles_in[i];
+			DFEVar result = PerformIntersectionTest(rays_in, triangle);
+			results = results.cat(result);
+		}
 
 		// output the results of the intersection tests as boolean values. Each ray has a word, equal to the number of triangles.
 		// make sure that all result words are multiples of the pcie word size.
 
-		io.output("results_out", constant.var(dfeUInt(127),0).cat(results), dfeRawBits(128));
+		io.output("results_out", results, dfeRawBits(128));
 	}
 
 	//https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm

@@ -18,7 +18,6 @@ struct triangle_t
 	struct vector3 v0;
 	struct vector3 v1;
 	struct vector3 v2;
-	char padding[12];
 };
 
 struct ray_t
@@ -55,6 +54,13 @@ public:
 	Triangles(max_file_t* maxfile, int triangle_count)
 	{
 		m_maxfile = maxfile;
+
+		/* some sanity checks */
+
+		if(!(max_get_constant_uint64t("TriangleWidthInBytes") == sizeof(triangle_t)))
+		{
+			printf("Mismatch between typedef triangle_t on CPU and DFE");
+		}
 
 		/* compute how many triangles will fit in one word. words may not be a multiple of the triangle width so will include padding at the msb */
 
@@ -122,17 +128,9 @@ public:
 
 };
 
-int main(void)
+void initialiseTestTriangles(Triangles* tris)
 {
-	max_file_t *maxfile = RayTracer_init();
-	max_engine_t *engine = max_load(maxfile, "*");
-
-	int num_rays = 16; //5 intersection tests
-
 	/* prepare some triangles */
-
-	/* the triangles data must be a multiple of the burst width of the memory, any spare capacity should be filled with invalid triangles */
-
 	int total_triangles = 16;
 
 	triangle_t* triangles = (triangle_t*)malloc(sizeof(triangle_t) * total_triangles);
@@ -153,10 +151,23 @@ int main(void)
 
 	}
 
-	Triangles* tris = new Triangles(maxfile, total_triangles);
 	tris->SetTriangles(triangles, total_triangles);
+}
+
+int main(void)
+{
+	max_file_t *maxfile = RayTracer_init();
+	max_engine_t *engine = max_load(maxfile, "*");
+
+
+
+	Triangles* tris = new Triangles(maxfile, 16);
+	initialiseTestTriangles(tris);
+
 
 	/* prepare some rays */
+
+	int num_rays = 16; //5 intersection tests
 
 	int rays_size = (sizeof(struct ray_t) * num_rays);
 	ray_t* rays = (ray_t*)malloc(rays_size);
@@ -167,16 +178,14 @@ int main(void)
 		if(i > 10){
 			rays[i].direction.z = 1;
 		}
+		else
+		{
+			rays[i].direction.z = 1;
+			rays[i].direction.x = 100;
+		}
 	}
 
-	/* prepare the output */
 
-	//for now one pcie word per result...
-
-	int total_intersections = num_rays * total_triangles;
-	int results_size = (sizeof(result_t) * total_intersections);
-	result_t* results = (result_t*)malloc(results_size);
-	memset(results,0,results_size);
 
 
 
@@ -185,7 +194,7 @@ int main(void)
 
 	max_actions_t* act = max_actions_init(maxfile, NULL);
 	
-	int triangles_per_tick = 1;
+	int triangles_per_tick = max_get_constant_uint64t(maxfile, "TrianglesPerTick");
 	int rays_per_tick = 1;
 	int rays_in_set = num_rays;
 	int triangles_in_set = tris->m_total_triangles;
@@ -200,7 +209,20 @@ int main(void)
 	max_set_ticks(act, "RayTracerKernel", intersection_ticks);
 	max_set_uint64t(act,"RayTracerKernel","total_triangles",triangles_in_set);
 	max_queue_input(act, "rays_in", rays, rays_size);
+
+
+	/* prepare the output */
+
+	//for now one pcie word per result...
+
+	int total_intersections = intersection_ticks;
+	int results_size = (sizeof(result_t) * total_intersections);
+	result_t* results = (result_t*)malloc(results_size);
+	memset(results,0,results_size);
+
 	max_queue_output(act, "results_out", results, results_size);
+
+
 
 
 
@@ -213,7 +235,7 @@ int main(void)
 	// TODO Use result data
 	for(int i = 0; i < total_intersections; ++i)
 	{
-		printf("%i: %i\n", i, results[i].result > 0 || results[i].padding > 0);
+		printf("%i: %i\n", i, results[i].result);
 	}
 
 	printf("Done.\n");
