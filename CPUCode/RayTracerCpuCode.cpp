@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
+#include <unistd.h>
 
 #include "Maxfiles.h"
 #include "MaxSLiCInterface.h"
+#include <errno.h>
 
 struct vector3
 {
@@ -29,8 +31,70 @@ struct ray_t
 
 struct result_t
 {
-	u_int64_t result;
-	u_int64_t padding;
+	u_int32_t ray_1;
+	u_int32_t triangle_1;
+	u_int32_t ray_2;
+	u_int32_t triangle_2;
+};
+
+
+class Results
+{
+private:
+
+	int m_slotSize; 		//one pcie word width
+	int m_numSlots;	//each slot can hold 2 results, so this can store 2 million intersections
+
+	int m_results_size;
+	void* m_results_buffer;
+
+	max_file_t* m_maxfile;
+
+	max_llstream_t* m_results_stream;
+
+public:
+	Results(max_file_t* maxfile, max_engine_t* engine)
+	{
+		m_maxfile = maxfile;
+
+		m_slotSize = 16;
+		m_numSlots = 512;
+
+		m_results_size = m_slotSize * m_numSlots;
+		m_results_buffer = NULL;
+		if(posix_memalign(&m_results_buffer, 4096, m_results_size) == ENOMEM){
+			printf("Could not allocate memory.");
+		}
+
+		memset(m_results_buffer, 0, m_results_size);
+
+		if(m_maxfile != NULL)
+		{
+			if(!max_has_handle_stream(m_maxfile, "results_out"))
+			{
+				printf("Maxfile does not have a results_out stream.\n");
+				return;
+			}
+		}
+
+		m_results_stream = max_llstream_setup(engine, "results_out", m_numSlots, m_slotSize, m_results_buffer);
+	}
+
+	void ReadResults()
+	{
+		int slots_to_get = 1;
+		void* results_data;
+		int num_slots_read = max_llstream_read(m_results_stream, slots_to_get, &results_data);
+
+		for(int i = 0; i < num_slots_read; i++)
+		{
+			result_t result = *((result_t*)results_data);
+			printf("Ray %i Triangle %i\n", result.ray_1, result.triangle_1);
+		}
+
+		max_llstream_read_discard(m_results_stream, num_slots_read);
+	}
+
 };
 
 class Triangles
@@ -57,7 +121,7 @@ public:
 
 		/* some sanity checks */
 
-		if(!(max_get_constant_uint64t("TriangleWidthInBytes") == sizeof(triangle_t)))
+		if(!(max_get_constant_uint64t(maxfile,"TriangleWidthInBytes") == sizeof(triangle_t)))
 		{
 			printf("Mismatch between typedef triangle_t on CPU and DFE");
 		}
@@ -206,37 +270,40 @@ int main(void)
 	max_set_uint64t(act,"MemoryCommandGenerator","triangles_to_read_in_bursts",tris->m_total_bursts);
 
 	max_ignore_lmem(act,"triangles_to_mem");
+
 	max_set_ticks(act, "RayTracerKernel", intersection_ticks);
 	max_set_uint64t(act,"RayTracerKernel","total_triangles",triangles_in_set);
+	max_set_uint64t(act,"RayTracerKernel","total_rays",rays_in_set);
+
 	max_queue_input(act, "rays_in", rays, rays_size);
+
 
 
 	/* prepare the output */
 
-	//for now one pcie word per result...
-
-	int total_intersections = intersection_ticks;
-	int results_size = (sizeof(result_t) * total_intersections);
-	result_t* results = (result_t*)malloc(results_size);
-	memset(results,0,results_size);
-
-	max_queue_output(act, "results_out", results, results_size);
-
-
-
-
+	Results results(maxfile, engine);
 
 	printf("Running on DFE...\n");
 
-	max_run(engine, act);
+	max_run_t* max_run = max_run_nonblock(engine, act);
+
+	max_wait(max_run);
+
+
+	sleep(5);
+
+	printf("Done. Getting results.");
+
+	//get the results while there are some
+
+	for(int i = 0; i < 1000; i++)
+	{
+		results.ReadResults();
+	}
+
 
 	max_unload(engine);
 	
-	// TODO Use result data
-	for(int i = 0; i < total_intersections; ++i)
-	{
-		printf("%i: %i\n", i, results[i].result);
-	}
 
 	printf("Done.\n");
 	return 0;

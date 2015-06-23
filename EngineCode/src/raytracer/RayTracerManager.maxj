@@ -35,7 +35,19 @@ public class RayTracerManager extends CustomManager {
 		rayTracer.getInput("triangles_in").connect(addStreamFromOnCardMemory("triangles_from_mem", memoryCommandGenerator.getOutput("read_commands")));
 
 		rayTracer.getInput("rays_in").connect(addStreamFromCPU("rays_in"));
-		addStreamToCPU("results_out").connect(rayTracer.getOutput("results_out"));
+
+
+		/* prepare for output */
+
+		KernelBlock resultsProcessor = addKernel(new ResultsProcessorKernel(makeKernelParameters("ResultsProcessorKernel")));
+
+		for(String output_name : rayTracer.getAllOutputs()){
+			if(output_name.startsWith("results")){
+				resultsProcessor.getInput(output_name).connect(rayTracer.getOutput(output_name));
+			}
+		}
+
+		addStreamToCPU("results_out", StreamMode.LOW_LATENCY_ENABLED).connect(resultsProcessor.getOutput("results_out"));
 
 		createSLiCinterface(modeDefault());
 		createSLiCinterface(memoryInitialisationInterface());

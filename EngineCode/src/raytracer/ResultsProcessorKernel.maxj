@@ -1,0 +1,46 @@
+package raytracer;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+
+public class ResultsProcessorKernel extends Kernel {
+
+
+	protected ResultsProcessorKernel(KernelParameters parameters) throws Exception {
+		super(parameters);
+
+		//this kernel will keep going so long as there is data at the inputs (until the cpu stops it)
+		flush.disabled();
+
+		//get all the inputs as nonblocking, and move round-robin between them seeing if there is any data. if there is, write it to the output
+
+		DFEVar inputSelect = control.count.simpleCounter(MathUtils.bitsToAddress(RayTracerKernel.Total_Output_Count), RayTracerKernel.Total_Output_Count);
+
+		List<DFEStruct> results_data = new ArrayList<DFEStruct>();
+		List<DFEVar> results_control = new ArrayList<DFEVar>();
+
+		for(int i = 0; i < RayTracerKernel.Total_Output_Count; i++)
+		{
+			DFEVar thisInputsTurn = inputSelect.eq(i);
+			NonBlockingInput<DFEStruct> rinput = io.nonBlockingInput("results_"+Integer.toString(i), RayTracerKernel.result_t, thisInputsTurn, 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+
+			results_data.add(rinput.data);
+			results_control.add(rinput.valid);
+		}
+
+		DFEStruct result_data = control.mux(inputSelect, results_data);
+		DFEVar result_control = control.mux(inputSelect, results_control);
+
+		io.output("results_out", result_data, RayTracerKernel.result_t, result_control);
+
+	}
+}

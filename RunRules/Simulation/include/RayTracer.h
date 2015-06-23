@@ -6,6 +6,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
+#define RayTracer_TriangleWidthInBytes (36)
 #define RayTracer_TrianglesInWidthInBits (3072)
 #define RayTracer_PCIE_ALIGNMENT (16)
 #define RayTracer_TrianglesPerTick (10)
@@ -161,6 +162,7 @@ max_actions_t* RayTracer_memoryInitialisation_convert(max_file_t *maxfile, RayTr
  * \param [in] ticks_MemoryCommandGenerator The number of ticks for which kernel "MemoryCommandGenerator" will run.
  * \param [in] ticks_RayTracerKernel The number of ticks for which kernel "RayTracerKernel" will run.
  * \param [in] inscalar_MemoryCommandGenerator_triangles_to_read_in_bursts Input scalar parameter "MemoryCommandGenerator.triangles_to_read_in_bursts".
+ * \param [in] inscalar_RayTracerKernel_total_rays Input scalar parameter "RayTracerKernel.total_rays".
  * \param [in] inscalar_RayTracerKernel_total_triangles Input scalar parameter "RayTracerKernel.total_triangles".
  * \param [in] instream_rays_in Stream "rays_in".
  * \param [in] instream_size_rays_in The size of the stream instream_rays_in in bytes.
@@ -175,6 +177,7 @@ void RayTracer(
 	uint64_t ticks_MemoryCommandGenerator,
 	uint64_t ticks_RayTracerKernel,
 	uint64_t inscalar_MemoryCommandGenerator_triangles_to_read_in_bursts,
+	uint64_t inscalar_RayTracerKernel_total_rays,
 	uint64_t inscalar_RayTracerKernel_total_triangles,
 	const void *instream_rays_in,
 	size_t instream_size_rays_in,
@@ -196,6 +199,7 @@ void RayTracer(
  * \param [in] ticks_MemoryCommandGenerator The number of ticks for which kernel "MemoryCommandGenerator" will run.
  * \param [in] ticks_RayTracerKernel The number of ticks for which kernel "RayTracerKernel" will run.
  * \param [in] inscalar_MemoryCommandGenerator_triangles_to_read_in_bursts Input scalar parameter "MemoryCommandGenerator.triangles_to_read_in_bursts".
+ * \param [in] inscalar_RayTracerKernel_total_rays Input scalar parameter "RayTracerKernel.total_rays".
  * \param [in] inscalar_RayTracerKernel_total_triangles Input scalar parameter "RayTracerKernel.total_triangles".
  * \param [in] instream_rays_in Stream "rays_in".
  * \param [in] instream_size_rays_in The size of the stream instream_rays_in in bytes.
@@ -211,6 +215,7 @@ max_run_t *RayTracer_nonblock(
 	uint64_t ticks_MemoryCommandGenerator,
 	uint64_t ticks_RayTracerKernel,
 	uint64_t inscalar_MemoryCommandGenerator_triangles_to_read_in_bursts,
+	uint64_t inscalar_RayTracerKernel_total_rays,
 	uint64_t inscalar_RayTracerKernel_total_triangles,
 	const void *instream_rays_in,
 	size_t instream_size_rays_in,
@@ -229,6 +234,7 @@ typedef struct {
 	uint64_t ticks_MemoryCommandGenerator; /**<  [in] The number of ticks for which kernel "MemoryCommandGenerator" will run. */
 	uint64_t ticks_RayTracerKernel; /**<  [in] The number of ticks for which kernel "RayTracerKernel" will run. */
 	uint64_t inscalar_MemoryCommandGenerator_triangles_to_read_in_bursts; /**<  [in] Input scalar parameter "MemoryCommandGenerator.triangles_to_read_in_bursts". */
+	uint64_t inscalar_RayTracerKernel_total_rays; /**<  [in] Input scalar parameter "RayTracerKernel.total_rays". */
 	uint64_t inscalar_RayTracerKernel_total_triangles; /**<  [in] Input scalar parameter "RayTracerKernel.total_triangles". */
 	const void *instream_rays_in; /**<  [in] Stream "rays_in". */
 	size_t instream_size_rays_in; /**<  [in] The size of the stream instream_rays_in in bytes. */

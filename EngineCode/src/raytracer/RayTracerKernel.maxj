@@ -17,7 +17,7 @@ import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 class RayTracerKernel extends Kernel {
 
 	private static final DFEType dfechar = dfeUInt(8);
-	private static final DFEType dfeuint = dfeInt(32);
+	private static final DFEType dfeuint = dfeUInt(32);
 	private static final DFEType dfefloat = dfeFloat(8, 24);
 	private static final DFEVectorType<DFEVar> vector3 = new DFEVectorType<DFEVar>(dfeFloat(8,24),3);
 	private static final DFEVectorType<DFEVar> vector4 = new DFEVectorType<DFEVar>(dfeFloat(8,24),4);
@@ -40,6 +40,7 @@ class RayTracerKernel extends Kernel {
 
 	public static final DFEStructType result_t =
 		new DFEStructType(
+				DFEStructType.sft("ray", dfeuint),
 				DFEStructType.sft("triangle", dfeuint)
 			);
 
@@ -47,6 +48,8 @@ class RayTracerKernel extends Kernel {
 	public static int Triangles_Per_Tick = 10;
 
 	public static int Rays_Per_Tick = 1;
+
+	public static int Total_Output_Count = 0;
 
 	public void AddConstantsToMaxFile(CustomManager manager)
 	{
@@ -74,30 +77,35 @@ class RayTracerKernel extends Kernel {
 
 
 		DFEVar total_triangles = io.scalarInput("total_triangles", dfeUInt(32));
+		DFEVar total_rays = io.scalarInput("total_rays", dfeUInt(32));
 
 		CounterChain set_counters = control.count.makeCounterChain();
-		DFEVar progress = set_counters.addCounter(total_triangles, Triangles_Per_Tick);
+		DFEVar ray_offset = set_counters.addCounter(total_rays, Rays_Per_Tick);
+		DFEVar triangle_offset = set_counters.addCounter(total_triangles, Triangles_Per_Tick);
 
 		//get the ray set
-		DFEStruct rays_in = io.input("rays_in", ray_t, progress.eq(0)); //only read a set of rays when the entire scene has been traversed
+		DFEStruct rays_in = io.input("rays_in", ray_t, triangle_offset.eq(0)); //only read a set of rays when the entire scene has been traversed
 
 		//get the triangle set
 		List<DFEStruct> triangles_in = GetTriangles();
-
-		DFEVar results = constant.var(dfeUInt(128 - Triangles_Per_Tick),0);
 
 		//perform the intersection tests
 		for(int i = 0; i < triangles_in.size(); i++)
 		{
 			DFEStruct triangle = triangles_in[i];
 			DFEVar result = PerformIntersectionTest(rays_in, triangle);
-			results = results.cat(result);
+
+			DFEStruct result_struct = result_t.newInstance(this);
+			result_struct["ray"] = (ray_offset + 0).cast(dfeuint);
+			result_struct["triangle"] = (triangle_offset + i).cast(dfeuint);
+
+			// prepare the outputs - each intersection test has its own buffered output which will be filled with only positive intersection results,
+			// which will then be formatted and transmitted over PCIe downstream
+
+			io.output("results_" + Integer.toString(Total_Output_Count), result_struct, result_t, result);
+			Total_Output_Count++;
 		}
 
-		// output the results of the intersection tests as boolean values. Each ray has a word, equal to the number of triangles.
-		// make sure that all result words are multiples of the pcie word size.
-
-		io.output("results_out", results, dfeRawBits(128));
 	}
 
 	//https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm
