@@ -47,7 +47,10 @@ public class RayTracerManager extends CustomManager {
 			}
 		}
 
+		resultsProcessor.getInput("complete").connect(rayTracer.getOutput("complete"));
+
 		addStreamToCPU("results_out", StreamMode.LOW_LATENCY_ENABLED).connect(resultsProcessor.getOutput("results_out"));
+		addStreamToCPU("status_out", StreamMode.LOW_LATENCY_ENABLED).connect(resultsProcessor.getOutput("status_out"));
 
 		createSLiCinterface(modeDefault());
 		createSLiCinterface(memoryInitialisationInterface());

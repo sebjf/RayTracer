@@ -106,6 +106,10 @@ class RayTracerKernel extends Kernel {
 			Total_Output_Count++;
 		}
 
+
+		DFEVar complete = ray_offset.eq(total_rays - Rays_Per_Tick) & triangle_offset.eq(total_triangles - Triangles_Per_Tick);
+		io.output("complete", complete, dfeBool());
+
 	}
 
 	//https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm

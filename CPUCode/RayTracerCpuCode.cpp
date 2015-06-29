@@ -37,13 +37,65 @@ struct result_t
 	u_int32_t triangle_2;
 };
 
+struct report_t
+{
+	u_int32_t ticks;
+	u_int32_t intersections;
+	u_int64_t reserved;
+};
+
+class Status
+{
+private:
+	int m_slotSize;
+	int m_numSlots;
+
+	max_llstream_t* m_status_stream;
+
+public:
+
+	report_t status_report;
+
+	Status(max_file_t* maxfile, max_engine_t* engine)
+	{
+		m_slotSize = 16;
+		m_numSlots = 64;
+
+		int results_size = m_slotSize * m_numSlots;
+		void* results_buffer = NULL;
+		if(posix_memalign(&results_buffer, 4096, results_size) == ENOMEM){
+			printf("Could not allocate memory.");
+		}
+
+		memset(results_buffer, 0, results_size);
+
+		m_status_stream = max_llstream_setup(engine, "status_out", m_numSlots, m_slotSize, results_buffer);
+	}
+
+	bool ReadStatus()
+	{
+		int slots_to_get = 1;
+		void* results_data;
+		int num_slots_read = max_llstream_read(m_status_stream, slots_to_get, &results_data);
+
+		for(int i = 0; i < num_slots_read; i++)
+		{
+			status_report = *((report_t*)results_data);
+		}
+
+		max_llstream_read_discard(m_status_stream, num_slots_read);
+
+		return (num_slots_read > 0);
+	}
+
+};
 
 class Results
 {
 private:
 
-	int m_slotSize; 		//one pcie word width
-	int m_numSlots;	//each slot can hold 2 results, so this can store 2 million intersections
+	int m_slotSize; 	//one pcie word width
+	int m_numSlots;
 
 	int m_results_size;
 	void* m_results_buffer;
@@ -282,27 +334,30 @@ int main(void)
 	/* prepare the output */
 
 	Results results(maxfile, engine);
+	Status status(maxfile, engine);
 
 	printf("Running on DFE...\n");
 
 	max_run_t* max_run = max_run_nonblock(engine, act);
 
-	max_wait(max_run);
-
-
-	sleep(5);
-
-	printf("Done. Getting results.");
-
-	//get the results while there are some
-
-	for(int i = 0; i < 1000; i++)
+	while(true)
 	{
 		results.ReadResults();
+
+		if(status.ReadStatus()){
+			break;
+		}
 	}
 
-
+	max_wait(max_run);
 	max_unload(engine);
+
+	printf("Done. Printing results...\n");
+
+	//print the results
+
+
+
 	
 
 	printf("Done.\n");

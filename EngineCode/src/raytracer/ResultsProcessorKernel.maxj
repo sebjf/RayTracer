@@ -5,21 +5,37 @@ import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Reductions;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Params;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.DelimiterMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingInput;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO.NonBlockingMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
 import com.maxeler.maxcompiler.v2.utils.MathUtils;
 
 public class ResultsProcessorKernel extends Kernel {
 
+	public static final DFEStructType report_t =
+		new DFEStructType(
+				DFEStructType.sft("ticks", dfeUInt(32)),
+				DFEStructType.sft("intersections",dfeUInt(32)),
+				DFEStructType.sft("reserved", dfeRawBits(64))
+			);
 
 	protected ResultsProcessorKernel(KernelParameters parameters) throws Exception {
 		super(parameters);
 
 		//this kernel will keep going so long as there is data at the inputs (until the cpu stops it)
 		flush.disabled();
+
+		//get the signal from the upstream kernel that indicates it is done with the intersection tests, and begin flushing the results
+
+		NonBlockingInput<DFEVar> completeInput = io.nonBlockingInput("complete", dfeBool(), constant.var(true), 1, DelimiterMode.FRAME_LENGTH, 0, NonBlockingMode.NO_TRICKLING);
+		DFEVar flush = Reductions.streamHold(completeInput.data, completeInput.valid);
+
 
 		//get all the inputs as nonblocking, and move round-robin between them seeing if there is any data. if there is, write it to the output
 
@@ -41,6 +57,24 @@ public class ResultsProcessorKernel extends Kernel {
 		DFEVar result_control = control.mux(inputSelect, results_control);
 
 		io.output("results_out", result_data, RayTracerKernel.result_t, result_control);
+
+
+		//keep track of how many empty reads there have been. once flush is asserted and we have gone around once, we can be sure there is no data left to read
+		//and therefore safely signal the cpu
+
+		Params counterParams = control.count.makeParams(MathUtils.bitsToAddress(RayTracerKernel.Total_Output_Count * 2)).withReset(result_control | ~flush);
+		Counter data_present_counter = control.count.makeCounter(counterParams);
+		DFEVar complete = (data_present_counter.getCount() > (RayTracerKernel.Total_Output_Count + 1));
+
+
+		//if complete is asserted signal to the cpu we are done
+
+		DFEStruct finalReport = report_t.newInstance(this);
+		finalReport["ticks"] = constant.var(dfeUInt(32), 0);
+		finalReport["intersections"] = constant.var(dfeUInt(32), 0);
+		finalReport["reserved"] = constant.var(dfeRawBits(64), 0);
+
+		io.output("status_out", finalReport, report_t, complete);
 
 	}
 }

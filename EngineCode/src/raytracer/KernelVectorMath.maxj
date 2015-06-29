@@ -25,17 +25,14 @@ public class KernelVectorMath {
 		return makeVector(a, a.getSize());
 	}
 
-	@SuppressWarnings("unchecked")
 	private static DFEVector<DFEVar> makeVector(DFEVector<DFEVar> a, int n)
 	{
 		KernelLib k = a.getKernel();
-		return (DFEVector<DFEVar>) (new DFEVectorType(a.getType().getContainedType(), n).newInstance(k));
+		return new DFEVectorType<DFEVar>(a.getType().getContainedType(), n).newInstance(k);
 	}
-
 
 	private static DFEVar makeConstant(DFEVector<DFEVar> a, double v)
 	{
-		KernelLib k = a.getKernel();
 		return a.getKernel().constant.var((DFEType) a.getType().getContainedType(), v);
 	}
 

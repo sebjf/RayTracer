@@ -170,6 +170,8 @@ max_actions_t* RayTracer_memoryInitialisation_convert(max_file_t *maxfile, RayTr
  * \param [in] instream_size_triangles_in The size of the stream instream_triangles_in in bytes.
  * \param [out] outstream_results_out Stream "results_out".
  * \param [in] outstream_size_results_out The size of the stream outstream_results_out in bytes.
+ * \param [out] outstream_status_out Stream "status_out".
+ * \param [in] outstream_size_status_out The size of the stream outstream_status_out in bytes.
  * \param [in] lmem_address_triangles_to_mem Linear LMem control for "triangles_to_mem" stream: base address, in bytes.
  * \param [in] lmem_arr_size_triangles_to_mem Linear LMem control for "triangles_to_mem" stream: array size, in bytes.
  */
@@ -185,6 +187,8 @@ void RayTracer(
 	size_t instream_size_triangles_in,
 	void *outstream_results_out,
 	size_t outstream_size_results_out,
+	void *outstream_status_out,
+	size_t outstream_size_status_out,
 	size_t lmem_address_triangles_to_mem,
 	size_t lmem_arr_size_triangles_to_mem);
 
@@ -207,6 +211,8 @@ void RayTracer(
  * \param [in] instream_size_triangles_in The size of the stream instream_triangles_in in bytes.
  * \param [out] outstream_results_out Stream "results_out".
  * \param [in] outstream_size_results_out The size of the stream outstream_results_out in bytes.
+ * \param [out] outstream_status_out Stream "status_out".
+ * \param [in] outstream_size_status_out The size of the stream outstream_status_out in bytes.
  * \param [in] lmem_address_triangles_to_mem Linear LMem control for "triangles_to_mem" stream: base address, in bytes.
  * \param [in] lmem_arr_size_triangles_to_mem Linear LMem control for "triangles_to_mem" stream: array size, in bytes.
  * \return A handle on the execution status, or NULL in case of error.
@@ -223,6 +229,8 @@ max_run_t *RayTracer_nonblock(
 	size_t instream_size_triangles_in,
 	void *outstream_results_out,
 	size_t outstream_size_results_out,
+	void *outstream_status_out,
+	size_t outstream_size_status_out,
 	size_t lmem_address_triangles_to_mem,
 	size_t lmem_arr_size_triangles_to_mem);
 
@@ -242,6 +250,8 @@ typedef struct {
 	size_t instream_size_triangles_in; /**<  [in] The size of the stream instream_triangles_in in bytes. */
 	void *outstream_results_out; /**<  [out] Stream "results_out". */
 	size_t outstream_size_results_out; /**<  [in] The size of the stream outstream_results_out in bytes. */
+	void *outstream_status_out; /**<  [out] Stream "status_out". */
+	size_t outstream_size_status_out; /**<  [in] The size of the stream outstream_status_out in bytes. */
 	size_t lmem_address_triangles_to_mem; /**<  [in] Linear LMem control for "triangles_to_mem" stream: base address, in bytes. */
 	size_t lmem_arr_size_triangles_to_mem; /**<  [in] Linear LMem control for "triangles_to_mem" stream: array size, in bytes. */
 } RayTracer_actions_t;
