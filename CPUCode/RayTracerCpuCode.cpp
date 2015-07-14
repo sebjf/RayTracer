@@ -142,6 +142,7 @@ public:
 		{
 			result_t result = *((result_t*)results_data);
 			printf("Ray %i Triangle %i\n", result.ray_1, result.triangle_1);
+			printf("Ray %i Triangle %i\n", result.ray_2, result.triangle_2);
 		}
 
 		max_llstream_read_discard(m_results_stream, num_slots_read);

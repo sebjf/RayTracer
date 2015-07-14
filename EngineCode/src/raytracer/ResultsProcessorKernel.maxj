@@ -62,9 +62,9 @@ public class ResultsProcessorKernel extends Kernel {
 		//keep track of how many empty reads there have been. once flush is asserted and we have gone around once, we can be sure there is no data left to read
 		//and therefore safely signal the cpu
 
-		Params counterParams = control.count.makeParams(MathUtils.bitsToAddress(RayTracerKernel.Total_Output_Count * 2)).withReset(result_control | ~flush);
+		Params counterParams = control.count.makeParams(MathUtils.bitsToAddress(RayTracerKernel.Total_Output_Count * 5)).withReset(result_control | ~flush);
 		Counter data_present_counter = control.count.makeCounter(counterParams);
-		DFEVar complete = (data_present_counter.getCount() > (RayTracerKernel.Total_Output_Count + 1));
+		DFEVar complete = (data_present_counter.getCount() > (RayTracerKernel.Total_Output_Count * 3 + 1));
 
 
 		//if complete is asserted signal to the cpu we are done
