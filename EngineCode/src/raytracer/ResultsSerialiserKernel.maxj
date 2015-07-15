@@ -16,7 +16,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
 import com.maxeler.maxcompiler.v2.utils.MathUtils;
 
-public class ResultsProcessorKernel extends Kernel {
+public class ResultsSerialiserKernel extends Kernel {
 
 	public static final DFEStructType report_t =
 		new DFEStructType(
@@ -25,7 +25,7 @@ public class ResultsProcessorKernel extends Kernel {
 				DFEStructType.sft("reserved", dfeRawBits(64))
 			);
 
-	protected ResultsProcessorKernel(KernelParameters parameters) throws Exception {
+	protected ResultsSerialiserKernel(KernelParameters parameters) throws Exception {
 		super(parameters);
 
 		//this kernel will keep going so long as there is data at the inputs (until the cpu stops it)
@@ -56,7 +56,9 @@ public class ResultsProcessorKernel extends Kernel {
 		DFEStruct result_data = control.mux(inputSelect, results_data);
 		DFEVar result_control = control.mux(inputSelect, results_control);
 
-		io.output("results_out", result_data, RayTracerKernel.result_t, result_control);
+		//count how many intersections there have been (the other option is to read this from the intersection test kernel)
+
+		DFEVar intersections_count = control.count.makeCounter(control.count.makeParams(32).withEnable(result_control)).getCount();
 
 
 		//keep track of how many empty reads there have been. once flush is asserted and we have gone around once, we can be sure there is no data left to read
@@ -66,12 +68,21 @@ public class ResultsProcessorKernel extends Kernel {
 		Counter data_present_counter = control.count.makeCounter(counterParams);
 		DFEVar complete = (data_present_counter.getCount() > (RayTracerKernel.Total_Output_Count * 3 + 1));
 
+		//2 results are sent for each pcie word, so make sure if we end up on an odd number we pack the last word to ensure it will be sent
+
+		DFEVar should_pad = constant.var(dfeUInt(1), 0);
+		should_pad = stream.offset(should_pad, -1) + result_control;
+
+		DFEVar output_enable = result_control | (complete & should_pad);
+
+		io.output("results_out", result_data, RayTracerKernel.result_t, output_enable);
+
 
 		//if complete is asserted signal to the cpu we are done
 
 		DFEStruct finalReport = report_t.newInstance(this);
 		finalReport["ticks"] = constant.var(dfeUInt(32), 0);
-		finalReport["intersections"] = constant.var(dfeUInt(32), 0);
+		finalReport["intersections"] = intersections_count;
 		finalReport["reserved"] = constant.var(dfeRawBits(64), 0);
 
 		io.output("status_out", finalReport, report_t, complete);

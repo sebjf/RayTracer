@@ -1,5 +1,5 @@
 #
 # This file is managed by MaxIDE. Do NOT change.
 #
-HEADERS:= 
+HEADERS:= Results.hpp Status.hpp Triangles.hpp Types.h Verification/CPUIntersectionEngine.hpp Verification/TestManager.hpp 
 SOURCES:= RayTracerCpuCode.cpp 

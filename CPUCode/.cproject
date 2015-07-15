@@ -36,6 +36,7 @@
 								<option id="gnu.c.compiler.option.include.paths.748237245" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../RunRules/Simulation/include"/>
 									<listOptionValue builtIn="false" value="&quot;${MAXCOMPILERDIR}\include\slic&quot;"/>
+									<listOptionValue builtIn="false" value="/usr/include/c++/4.4.7"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.971003698" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -55,6 +56,10 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="Verification" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Verification"/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="scannerConfiguration">
@@ -421,6 +426,10 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Verification"/>
+						<entry excluding="Verification" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="scannerConfiguration">

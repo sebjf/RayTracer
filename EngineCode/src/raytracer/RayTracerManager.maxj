@@ -39,7 +39,7 @@ public class RayTracerManager extends CustomManager {
 
 		/* prepare for output */
 
-		KernelBlock resultsProcessor = addKernel(new ResultsProcessorKernel(makeKernelParameters("ResultsProcessorKernel")));
+		KernelBlock resultsProcessor = addKernel(new ResultsSerialiserKernel(makeKernelParameters("ResultsProcessorKernel")));
 
 		for(String output_name : rayTracer.getAllOutputs()){
 			if(output_name.startsWith("results")){

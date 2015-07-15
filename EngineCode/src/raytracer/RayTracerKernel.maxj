@@ -89,11 +89,16 @@ class RayTracerKernel extends Kernel {
 		//get the triangle set
 		List<DFEStruct> triangles_in = GetTriangles();
 
+		//keep all the single bit results in order to count how many positive intersections occurred on each tick for book-keeping
+		List<DFEVar> intersection_test_results = new ArrayList<DFEVar>();
+
 		//perform the intersection tests
 		for(int i = 0; i < triangles_in.size(); i++)
 		{
 			DFEStruct triangle = triangles_in[i];
 			DFEVar result = PerformIntersectionTest(rays_in, triangle);
+
+			intersection_test_results.add(result);
 
 			DFEStruct result_struct = result_t.newInstance(this);
 			result_struct["ray"] = (ray_offset + 0).cast(dfeuint);
@@ -114,7 +119,7 @@ class RayTracerKernel extends Kernel {
 
 	//https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm
 
-	DFEVar PerformIntersectionTest(DFEStruct ray, DFEStruct triangle) throws Exception
+	protected DFEVar PerformIntersectionTest(DFEStruct ray, DFEStruct triangle) throws Exception
 	{
 		DFEVector<DFEVar> V1 = triangle["v0"];
 		DFEVector<DFEVar> V2 = triangle["v1"];
