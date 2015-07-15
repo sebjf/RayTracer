@@ -22,10 +22,7 @@ public class RayTracerManager extends CustomManager {
 		debug.setDebugLevel(myDebugLevel);
 
 		KernelBlock rayTracer = addKernel(new RayTracerKernel(makeKernelParameters(s_kernelName)));
-
-		addMaxFileConstant("TrianglesInWidthInBits", RayTracerKernel.Triangles_In_Width_in_Bits);
-		addMaxFileConstant("TrianglesPerTick", RayTracerKernel.Triangles_Per_Tick);
-		addMaxFileConstant("TriangleWidthInBytes", RayTracerKernel.triangle_t.getTotalBits() / 8);
+		RayTracerKernel.AddConstantsToMaxFile(this);
 
 		/* Memory initialisation for triangles */
 

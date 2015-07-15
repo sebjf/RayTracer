@@ -12,6 +12,52 @@
 #include "Verification/TestManager.hpp"
 
 
+/* For optimum performance, the rays word width should always be a multiple of the PCIe word width, and therefore the main function of this class
+ * is to ensure that the rays provided are a multiple of the rays word size in rays, so there is no stalling waiting on data. */
+class Rays
+{
+public:
+	ray_t* m_rays;
+	size_t m_num_rays;
+
+private:
+	int m_rays_width_in_bytes;
+	int m_rays_width_in_rays;
+
+
+public:
+	Rays(max_file_t* maxfile)
+	{
+		m_rays_width_in_bytes = max_get_constant_uint64t(maxfile,"RaysWordWidthInBits") / 8;
+		m_rays_width_in_rays = max_get_constant_uint64t(maxfile,"RaysPerWord");
+
+		if(m_rays_width_in_bytes != (m_rays_width_in_rays * sizeof(ray_t)))
+		{
+			printf("ERROR: rays word width is not a multiple of the ray data structure width. This is not currently supported.\n");
+		}
+	}
+
+	void SetRays(ray_t* rays, size_t num_rays)
+	{
+		m_rays = rays;
+		m_num_rays = num_rays;
+
+		//for rays, only a simple check if we need to pad the input to make the ray count a multiple of the rays word width (in rays)
+		if((num_rays % m_rays_width_in_rays) != 0)
+		{
+			m_num_rays = m_num_rays + (m_rays_width_in_rays - (num_rays % m_rays_width_in_rays));
+			m_rays = (ray_t*)realloc(m_rays, m_num_rays * sizeof(ray_t));
+		}
+	}
+
+	void QueueRays(max_actions_t* actions)
+	{
+		max_queue_input(actions, "rays_in", m_rays, m_num_rays * sizeof(ray_t));
+	}
+
+
+};
+
 int main(void)
 {
 	max_file_t *maxfile = RayTracer_init();
@@ -26,12 +72,16 @@ int main(void)
 	tris->SetTriangles(test_manager.m_triangles, test_manager.m_triangle_count);
 	tris->IntialiseTriangles(engine,0);
 
+	/* Queue the rays */
+
+	Rays rays(maxfile);
+	rays.SetRays(test_manager.m_rays, test_manager.m_rays_count);
 
 	max_actions_t* act = max_actions_init(maxfile, NULL);
 	
 	int triangles_per_tick = max_get_constant_uint64t(maxfile, "TrianglesPerTick");
-	int rays_per_tick = 1;
-	int rays_in_set = test_manager.m_rays_count;
+	int rays_per_tick = max_get_constant_uint64t(maxfile, "RaysPerTick");
+	int rays_in_set = rays.m_num_rays;
 	int triangles_in_set = tris->m_total_triangles;
 
 	int intersection_ticks = (triangles_in_set / triangles_per_tick) * (rays_in_set / rays_per_tick);
@@ -46,10 +96,7 @@ int main(void)
 	max_set_uint64t(act,"RayTracerKernel","total_triangles",triangles_in_set);
 	max_set_uint64t(act,"RayTracerKernel","total_rays",rays_in_set);
 
-	/* Queue the rays */
-
-	max_queue_input(act, "rays_in", test_manager.m_rays, test_manager.m_rays_size);
-
+	rays.QueueRays(act);
 
 
 	/* prepare the output */

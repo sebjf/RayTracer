@@ -34,8 +34,7 @@ class RayTracerKernel extends Kernel {
 	public static final DFEStructType ray_t =
 		new DFEStructType(
 				DFEStructType.sft("origin", vector3),
-				DFEStructType.sft("direction", vector3),
-				DFEStructType.sft("padding", dfeUInt(64))
+				DFEStructType.sft("direction", vector3)
 			);
 
 	public static final DFEStructType result_t =
@@ -44,16 +43,25 @@ class RayTracerKernel extends Kernel {
 				DFEStructType.sft("triangle", dfeuint)
 			);
 
-	public static int Triangles_In_Width_in_Bits = 384 * 8;
+	public static int Triangles_In_Width_in_Bits = 384 * 8; //burst size (in bytes) * bits per byte
 	public static int Triangles_Per_Tick = 10;
 
-	public static int Rays_Per_Tick = 1;
+	public static int Rays_Per_Tick = 2;
+
+	public static int Rays_Word_Width_in_Bits = -1; //from these the cpu can determine what padding, if any, to add to the rays queued
+	public static int Rays_Per_Word = -1;
 
 	public static int Total_Output_Count = 0;
 
-	public void AddConstantsToMaxFile(CustomManager manager)
+	public static void AddConstantsToMaxFile(CustomManager manager)
 	{
-		manager.addMaxFileConstant("TriangleInWidthInBits", Triangles_In_Width_in_Bits);
+		manager.addMaxFileConstant("TrianglesInWidthInBits", Triangles_In_Width_in_Bits);
+		manager.addMaxFileConstant("TrianglesPerTick", Triangles_Per_Tick);
+		manager.addMaxFileConstant("TriangleWidthInBytes", triangle_t.getTotalBits() / 8);
+		manager.addMaxFileConstant("RaysWordWidthInBits", Rays_Word_Width_in_Bits);
+		manager.addMaxFileConstant("RaysPerWord", Rays_Per_Word);
+		manager.addMaxFileConstant("RaysPerTick", Rays_Per_Tick);
+
 	}
 
 	protected List<DFEStruct> GetTriangles()
@@ -63,13 +71,34 @@ class RayTracerKernel extends Kernel {
 		Triangles_Per_Tick = (int) Math.floor((float)Triangles_In_Width_in_Bits / (float)triangle_t.getTotalBits());
 
 		DFEVar triangles_in = io.input("triangles_in", dfeRawBits(Triangles_In_Width_in_Bits));
-
 		for(int i = 0; i < Triangles_Per_Tick; i++)
 		{
 			triangles.add(triangle_t.unpack(triangles_in.slice(i * triangle_t.getTotalBits(), triangle_t.getTotalBits())));
 		}
 
 		return triangles;
+	}
+
+	protected List<DFEStruct> GetRays(DFEVar enable)
+	{
+		List<DFEStruct> rays = new ArrayList<DFEStruct>();
+
+		//calculate the width of the rays word - multiple of the pcie word width (128)
+		int bits_per_ray = ray_t.getTotalBits();
+		int bits_per_rays = bits_per_ray * Rays_Per_Tick;
+		int pcie_words_per_rays = (int)Math.ceil(bits_per_rays / 128.0f);
+		int rays_word_width_in_bits = pcie_words_per_rays * 128;
+
+		DFEVar rays_in = io.input("rays_in", dfeRawBits(rays_word_width_in_bits), enable);
+		for(int i = 0; i < Rays_Per_Tick; i++)
+		{
+			rays.add(ray_t.unpack(rays_in.slice(i * ray_t.getTotalBits(), ray_t.getTotalBits())));
+		}
+
+		Rays_Word_Width_in_Bits = rays_word_width_in_bits;
+		Rays_Per_Word = Rays_Per_Tick;
+
+		return rays;
 	}
 
 	protected RayTracerKernel(KernelParameters parameters) throws Exception {
@@ -84,7 +113,7 @@ class RayTracerKernel extends Kernel {
 		DFEVar triangle_offset = set_counters.addCounter(total_triangles, Triangles_Per_Tick);
 
 		//get the ray set
-		DFEStruct rays_in = io.input("rays_in", ray_t, triangle_offset.eq(0)); //only read a set of rays when the entire scene has been traversed
+		List<DFEStruct> rays_in = GetRays(triangle_offset.eq(0));
 
 		//get the triangle set
 		List<DFEStruct> triangles_in = GetTriangles();
@@ -93,22 +122,25 @@ class RayTracerKernel extends Kernel {
 		List<DFEVar> intersection_test_results = new ArrayList<DFEVar>();
 
 		//perform the intersection tests
-		for(int i = 0; i < triangles_in.size(); i++)
+		for(int r = 0; r < rays_in.size(); r++){
+		for(int t = 0; t < triangles_in.size(); t++)
 		{
-			DFEStruct triangle = triangles_in[i];
-			DFEVar result = PerformIntersectionTest(rays_in, triangle);
+			DFEStruct triangle = triangles_in[t];
+			DFEStruct ray = rays_in[r];
+			DFEVar result = PerformIntersectionTest(ray, triangle);
 
 			intersection_test_results.add(result);
 
 			DFEStruct result_struct = result_t.newInstance(this);
-			result_struct["ray"] = (ray_offset + 0).cast(dfeuint);
-			result_struct["triangle"] = (triangle_offset + i).cast(dfeuint);
+			result_struct["ray"] = (ray_offset + r).cast(dfeuint);
+			result_struct["triangle"] = (triangle_offset + t).cast(dfeuint);
 
 			// prepare the outputs - each intersection test has its own buffered output which will be filled with only positive intersection results,
 			// which will then be formatted and transmitted over PCIe downstream
 
 			io.output("results_" + Integer.toString(Total_Output_Count), result_struct, result_t, result);
 			Total_Output_Count++;
+		}
 		}
 
 

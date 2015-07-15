@@ -48,7 +48,7 @@ public:
 
 		/* prepare some rays */
 
-		m_rays_count = 16; //5 intersection tests
+		m_rays_count = 15; //5 intersection tests
 
 		m_rays_size = (sizeof(struct ray_t) * m_rays_count);
 		m_rays = (ray_t*)malloc(m_rays_size);
@@ -86,7 +86,6 @@ public:
 		}else
 		{
 			printf("1. ERROR: Counts do not match.\n");
-			return false;
 		}
 
 		for(uint i = 0; i < cpu_engine.m_intersections.size(); i++)

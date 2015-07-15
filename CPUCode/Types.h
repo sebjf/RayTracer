@@ -31,7 +31,6 @@ struct ray_t
 {
 	struct vector3 origin;
 	struct vector3 direction;
-	u_int64_t padding;
 };
 
 struct triangle_t
