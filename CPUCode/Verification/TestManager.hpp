@@ -85,7 +85,8 @@ public:
 			printf("1. Counts match.\n");
 		}else
 		{
-			printf("1. ERROR: Counts do not match.\n");
+			printf("1. ERROR: Counts do not match. %i vs. %i\n", cpu_engine.m_intersections.size(), results.m_intersections.size());
+
 		}
 
 		for(uint i = 0; i < cpu_engine.m_intersections.size(); i++)

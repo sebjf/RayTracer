@@ -46,7 +46,9 @@ public:
 		if((num_rays % m_rays_width_in_rays) != 0)
 		{
 			m_num_rays = m_num_rays + (m_rays_width_in_rays - (num_rays % m_rays_width_in_rays));
-			m_rays = (ray_t*)realloc(m_rays, m_num_rays * sizeof(ray_t));
+			m_rays = (ray_t*)malloc(m_num_rays * sizeof(ray_t));
+			memset(m_rays, 0, m_num_rays * sizeof(ray_t));
+			memcpy(m_rays, rays, num_rays * sizeof(ray_t));
 		}
 	}
 
